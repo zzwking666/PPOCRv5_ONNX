@@ -38,8 +38,7 @@ bool RecModel::Init(const std::string& model_path, const std::string& dict_path,
             }
             if (!line.empty()) dict_.push_back(line);
         }
-        blank_idx_ = static_cast<int>(dict_.size());
-        dict_.push_back(" ");
+        blank_idx_ = 0;
 
         session_options_ = Ort::SessionOptions();
         session_options_.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
@@ -83,6 +82,26 @@ bool RecModel::Init(const std::string& model_path, const std::string& dict_path,
             output_names_.push_back(name.c_str());
         }
 
+        // 校验字典与模型类别数是否匹配。
+        // 当前CTC解码按 blank=0，期望: num_classes = dict_size + 1。
+        // 若为 dict_size + 2，通常是字典缺少空格字符（use_space_char），自动补齐一个空格。
+        if (session_->GetOutputCount() > 0) {
+            auto out_shape = session_->GetOutputTypeInfo(0).GetTensorTypeAndShapeInfo().GetShape();
+            if (out_shape.size() >= 3 && out_shape[2] > 0) {
+                const int model_classes = static_cast<int>(out_shape[2]);
+                if (model_classes == static_cast<int>(dict_.size()) + 2) {
+                    dict_.push_back(" ");
+                    std::cout << "[RecModel] dict missing space char, auto appended one space token." << std::endl;
+                }
+
+                if (model_classes != static_cast<int>(dict_.size()) + 1) {
+                    std::cerr << "[RecModel] Dict/model class mismatch at init: model=" << model_classes
+                              << ", dict=" << dict_.size() << " (expect dict+1 for CTC blank@0)" << std::endl;
+                    return false;
+                }
+            }
+        }
+
         return true;
     }
     catch (const Ort::Exception& e) {
@@ -119,8 +138,23 @@ std::vector<float> RecModel::InferRaw(const cv::Mat& image, int& seq_len) {
 std::pair<std::string, float> RecModel::Infer(const cv::Mat& image) {
     int seq_len = 0;
     auto output = InferRaw(image, seq_len);
+    if (output.empty() || seq_len <= 0) return { "", 0.0f };
 
-    int num_classes = static_cast<int>(dict_.size());
+    if (output.size() % static_cast<size_t>(seq_len) != 0) {
+        std::cerr << "Rec output size invalid: output=" << output.size()
+                  << ", seq_len=" << seq_len << std::endl;
+        return { "", 0.0f };
+    }
+
+    const int num_classes = static_cast<int>(output.size() / seq_len);
+
+    // blank=0 的CTC：类别数应为 dict + 1
+    if (num_classes != static_cast<int>(dict_.size()) + 1) {
+        std::cerr << "Dict/model class mismatch: model=" << num_classes
+                  << ", dict=" << dict_.size() << " (expect dict+1 for CTC blank@0)" << std::endl;
+        return { "", 0.0f };
+    }
+
     std::vector<int> preds;
     float total_score = 0.0f;
     int valid_count = 0;
@@ -134,6 +168,7 @@ std::pair<std::string, float> RecModel::Infer(const cv::Mat& image) {
                 max_idx = c;
             }
         }
+
         preds.push_back(max_idx);
 
         if (max_idx != blank_idx_) {
@@ -142,7 +177,19 @@ std::pair<std::string, float> RecModel::Infer(const cv::Mat& image) {
         }
     }
 
-    std::string text = ocr_utils::CTCDecode(preds, dict_, blank_idx_);
+    // 模型索引: 0=blank, 1..N=字典第0..N-1项
+    std::string text;
+    int prev = -1;
+    for (int pred : preds) {
+        if (pred != blank_idx_ && pred != prev) {
+            const int dict_idx = pred - 1;
+            if (dict_idx >= 0 && dict_idx < static_cast<int>(dict_.size())) {
+                text += dict_[dict_idx];
+            }
+        }
+        prev = pred;
+    }
+
     float score = (valid_count > 0) ? (total_score / valid_count) : 0.0f;
 
     return { text, score };

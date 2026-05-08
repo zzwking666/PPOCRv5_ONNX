@@ -10,8 +10,8 @@ class DetModel {
 public:
     struct Config {
         int target_size = 960;
-        float db_thresh = 0.1f;
-        float db_box_thresh = 0.1f;
+        float db_thresh = 0.3f;
+        float db_box_thresh = 0.6f;
         float db_unclip_ratio = 1.5f;
     };
 
