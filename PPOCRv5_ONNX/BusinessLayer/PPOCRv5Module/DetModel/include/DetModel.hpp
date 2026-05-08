@@ -10,8 +10,8 @@ class DetModel {
 public:
     struct Config {
         int target_size = 960;
-        float db_thresh = 0.3f;
-        float db_box_thresh = 0.6f;
+        float db_thresh = 0.1f;
+        float db_box_thresh = 0.1f;
         float db_unclip_ratio = 1.5f;
     };
 
@@ -33,6 +33,8 @@ private:
     Ort::MemoryInfo memory_info_;
     Config cfg_;
 
+    std::vector<std::string> input_name_storage_;
+    std::vector<std::string> output_name_storage_;
     std::vector<const char*> input_names_;
     std::vector<const char*> output_names_;
 };

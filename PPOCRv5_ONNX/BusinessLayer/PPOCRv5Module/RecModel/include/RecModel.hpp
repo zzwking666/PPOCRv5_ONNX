@@ -34,6 +34,8 @@ private:
     std::vector<std::string> dict_;
     int blank_idx_ = 0;
 
+    std::vector<std::string> input_name_storage_;
+    std::vector<std::string> output_name_storage_;
     std::vector<const char*> input_names_;
     std::vector<const char*> output_names_;
 };

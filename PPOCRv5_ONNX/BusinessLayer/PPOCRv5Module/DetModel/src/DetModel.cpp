@@ -28,11 +28,29 @@ bool DetModel::Init(const std::string& model_path, const Config& cfg, bool use_g
 #endif
 
         Ort::AllocatorWithDefaultOptions allocator;
+        input_name_storage_.clear();
+        output_name_storage_.clear();
+        input_names_.clear();
+        output_names_.clear();
+        input_name_storage_.reserve(session_->GetInputCount());
+        output_name_storage_.reserve(session_->GetOutputCount());
+        input_names_.reserve(session_->GetInputCount());
+        output_names_.reserve(session_->GetOutputCount());
+
         for (size_t i = 0; i < session_->GetInputCount(); i++) {
-            input_names_.push_back(session_->GetInputNameAllocated(i, allocator).get());
+            auto input_name = session_->GetInputNameAllocated(i, allocator);
+            input_name_storage_.emplace_back(input_name.get());
         }
         for (size_t i = 0; i < session_->GetOutputCount(); i++) {
-            output_names_.push_back(session_->GetOutputNameAllocated(i, allocator).get());
+            auto output_name = session_->GetOutputNameAllocated(i, allocator);
+            output_name_storage_.emplace_back(output_name.get());
+        }
+
+        for (auto& name : input_name_storage_) {
+            input_names_.push_back(name.c_str());
+        }
+        for (auto& name : output_name_storage_) {
+            output_names_.push_back(name.c_str());
         }
 
         return true;
@@ -65,7 +83,8 @@ cv::Mat DetModel::InferRaw(const cv::Mat& image, float& scale) {
     auto output_shape = output_tensors[0].GetTensorTypeAndShapeInfo().GetShape();
     float* output_data = output_tensors[0].GetTensorMutableData<float>();
 
-    return cv::Mat(output_shape[2], output_shape[3], CV_32F, output_data);
+    cv::Mat prob((int)output_shape[2], (int)output_shape[3], CV_32F, output_data);
+    return prob.clone();
 }
 
 std::vector<ocr_utils::TextBox> DetModel::Infer(const cv::Mat& image) {
