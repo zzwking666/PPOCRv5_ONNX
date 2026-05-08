@@ -88,8 +88,8 @@ namespace ocr_utils {
         float box_thresh, float unclip_ratio,
         const cv::Size& ori_size, float scale) {
         cv::Mat binary;
-        cv::threshold(pred, binary, thresh * 255, 255, cv::THRESH_BINARY);
-        binary.convertTo(binary, CV_8U);
+        cv::threshold(pred, binary, thresh, 1.0, cv::THRESH_BINARY);
+        binary.convertTo(binary, CV_8U, 255.0);
 
         std::vector<std::vector<cv::Point>> contours;
         std::vector<cv::Vec4i> hierarchy;
@@ -255,14 +255,30 @@ namespace ocr_utils {
 
     float PolygonIoU(const std::vector<cv::Point>& poly1,
         const std::vector<cv::Point>& poly2) {
-        std::vector<cv::Point> inter;
-        float area1 = cv::contourArea(poly1);
-        float area2 = cv::contourArea(poly2);
+        if (poly1.size() < 3 || poly2.size() < 3) {
+            return 0.0f;
+        }
+
+        float area1 = std::abs(static_cast<float>(cv::contourArea(poly1)));
+        float area2 = std::abs(static_cast<float>(cv::contourArea(poly2)));
 
         if (area1 < 1e-6f || area2 < 1e-6f) return 0.0f;
 
-        cv::intersectConvexConvex(poly1, poly2, inter, false);
-        float inter_area = cv::contourArea(inter);
+        std::vector<cv::Point2f> p1, p2, inter;
+        p1.reserve(poly1.size());
+        p2.reserve(poly2.size());
+
+        for (const auto& pt : poly1) {
+            p1.emplace_back(static_cast<float>(pt.x), static_cast<float>(pt.y));
+        }
+        for (const auto& pt : poly2) {
+            p2.emplace_back(static_cast<float>(pt.x), static_cast<float>(pt.y));
+        }
+
+        float inter_area = cv::intersectConvexConvex(p1, p2, inter, false);
+        if (inter_area < 1e-6f || inter.empty()) {
+            return 0.0f;
+        }
 
         return inter_area / (area1 + area2 - inter_area + 1e-6f);
     }

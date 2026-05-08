@@ -2,6 +2,7 @@
 #include "ocr_utils.hpp"
 #include <iostream>
 #include <filesystem>
+#include <algorithm>
 
 DetModel::DetModel() : env_(ORT_LOGGING_LEVEL_WARNING, "det"),
 memory_info_(Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)) {}
@@ -53,6 +54,21 @@ bool DetModel::Init(const std::string& model_path, const Config& cfg, bool use_g
             output_names_.push_back(name.c_str());
         }
 
+        std::cout << "[DetModel] Init OK" << std::endl;
+        std::cout << "  model_path: " << model_path << std::endl;
+        std::cout << "  use_gpu: " << (use_gpu ? "true" : "false") << std::endl;
+        std::cout << "  cfg: target_size=" << cfg_.target_size
+                  << ", db_thresh=" << cfg_.db_thresh
+                  << ", db_box_thresh=" << cfg_.db_box_thresh
+                  << ", db_unclip_ratio=" << cfg_.db_unclip_ratio << std::endl;
+        std::cout << "  input_count=" << input_names_.size() << ", output_count=" << output_names_.size() << std::endl;
+        for (size_t i = 0; i < input_name_storage_.size(); ++i) {
+            std::cout << "  input[" << i << "]: " << input_name_storage_[i] << std::endl;
+        }
+        for (size_t i = 0; i < output_name_storage_.size(); ++i) {
+            std::cout << "  output[" << i << "]: " << output_name_storage_[i] << std::endl;
+        }
+
         return true;
     }
     catch (const Ort::Exception& e) {
@@ -72,6 +88,11 @@ cv::Mat DetModel::InferRaw(const cv::Mat& image, float& scale) {
 
     std::vector<float> input_data(input_blob.begin<float>(), input_blob.end<float>());
 
+    std::cout << "[DetModel] InferRaw" << std::endl;
+    std::cout << "  image: " << image.cols << "x" << image.rows << " channels=" << image.channels() << std::endl;
+    std::cout << "  input_shape: [" << input_shape[0] << ", " << input_shape[1] << ", " << input_shape[2] << ", " << input_shape[3] << "]" << std::endl;
+    std::cout << "  input_data.size=" << input_data.size() << " scale=" << scale << std::endl;
+
     Ort::Value input_tensor = Ort::Value::CreateTensor<float>(
         memory_info_, input_data.data(), input_data.size(), input_shape.data(), input_shape.size());
 
@@ -84,12 +105,32 @@ cv::Mat DetModel::InferRaw(const cv::Mat& image, float& scale) {
     float* output_data = output_tensors[0].GetTensorMutableData<float>();
 
     cv::Mat prob((int)output_shape[2], (int)output_shape[3], CV_32F, output_data);
+
+    double min_v = 0.0;
+    double max_v = 0.0;
+    cv::minMaxLoc(prob, &min_v, &max_v);
+    cv::Scalar mean_v = cv::mean(prob);
+
+    std::cout << "  output_shape: [";
+    for (size_t i = 0; i < output_shape.size(); ++i) {
+        std::cout << output_shape[i] << (i + 1 == output_shape.size() ? "" : ", ");
+    }
+    std::cout << "]" << std::endl;
+    std::cout << "  prob stats: min=" << min_v << ", max=" << max_v << ", mean=" << mean_v[0] << std::endl;
+
     return prob.clone();
 }
 
 std::vector<ocr_utils::TextBox> DetModel::Infer(const cv::Mat& image) {
     float scale = 1.0f;
     cv::Mat pred = InferRaw(image, scale);
-    return ocr_utils::DBPostprocess(pred, cfg_.db_thresh, cfg_.db_box_thresh,
+    auto boxes = ocr_utils::DBPostprocess(pred, cfg_.db_thresh, cfg_.db_box_thresh,
         cfg_.db_unclip_ratio, image.size(), scale);
+
+    std::cout << "[DetModel] DBPostprocess boxes=" << boxes.size()
+              << " (db_thresh=" << cfg_.db_thresh
+              << ", db_box_thresh=" << cfg_.db_box_thresh
+              << ", unclip=" << cfg_.db_unclip_ratio << ")" << std::endl;
+
+    return boxes;
 }
