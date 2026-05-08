@@ -1,0 +1,5 @@
+add_subdirectory(DetModel)
+add_subdirectory(Postprocess)
+add_subdirectory(PPOCRv5System)
+add_subdirectory(Preprocess)
+add_subdirectory(RecModel)
