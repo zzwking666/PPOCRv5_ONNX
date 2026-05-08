@@ -20,6 +20,7 @@ target_link_libraries(${BRTD_TARGET}
 	PRIVATE RWUL::rqwu
 	PRIVATE Modules::Modules
 	PRIVATE Tools::PanZoomLabel
+	PRIVATE BusinessLayer::PPOCRv5System
 )
 
 target_include_directories(${BRTD_TARGET}
