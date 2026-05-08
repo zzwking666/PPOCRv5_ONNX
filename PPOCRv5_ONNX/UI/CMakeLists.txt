@@ -27,6 +27,8 @@ target_include_directories(${BRTD_TARGET}
 	PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
+rw_deploy(${BRTD_TARGET})
+
 
 # 编译好后调用qt中的windeployqt.exe
 add_custom_command(TARGET ${BRTD_TARGET} POST_BUILD

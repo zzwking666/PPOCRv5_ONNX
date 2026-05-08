@@ -25,6 +25,7 @@ set(CMAKE_AUTORCC ON)
 #查找第三方库
 find_package(OpenCV CONFIG REQUIRED)
 find_package(Qt6 REQUIRED COMPONENTS Core Widgets Gui Concurrent)
-find_package(RWUL CONFIG REQUIRED COMPONENTS core oso hoecd rqwu imgcore imgqt )
+find_package(ICU REQUIRED COMPONENTS uc i18n)
+find_package(RWUL CONFIG REQUIRED COMPONENTS core oso hoecd rqwu imgcore imgqt imevo)
 
 add_subdirectory ("PPOCRv5_ONNX")
