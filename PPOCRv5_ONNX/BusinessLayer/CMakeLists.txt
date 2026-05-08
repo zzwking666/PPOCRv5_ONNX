@@ -1,0 +1,2 @@
+add_subdirectory(ImageStitch)
+add_subdirectory(AsynchronousThread)

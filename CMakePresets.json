@@ -1,0 +1,117 @@
+﻿{
+  "version": 4,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 19,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "windows-base",
+      "hidden": true,
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+    },
+    {
+      "name": "windows-ninja-base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "vs2022",
+      "generator": "Visual Studio 17 2022",
+      "inherits": "windows-base"
+    },
+    {
+      "name": "vs2022-NoHardware",
+      "generator": "Visual Studio 17 2022",
+      "inherits": "windows-base",
+      "cacheVariables": {
+        "BUILD_WITHOUT_HARDWARE=": true
+      }
+    },
+    {
+      "name": "vs2019",
+      "generator": "Visual Studio 16 2019",
+      "inherits": "windows-base"
+    },
+    {
+      "name": "windows-ninja-debug",
+      "generator": "Ninja",
+      "inherits": "windows-ninja-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "windows-ninja-release",
+      "generator": "Ninja",
+      "inherits": "windows-ninja-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    }
+
+  ],
+  "buildPresets": [
+    {
+      "name": "vs2022-debug",
+      "configurePreset": "vs2022",
+      "configuration": "Debug",
+      "jobs": 8
+    },
+    {
+      "name": "vs2022-release",
+      "configurePreset": "vs2022",
+      "configuration": "Release",
+      "jobs": 8
+    },
+    {
+      "name": "vs2022-debug-NoHardware",
+      "configurePreset": "vs2022-NoHardware",
+      "configuration": "Debug",
+      "jobs": 8
+    },
+    {
+      "name": "vs2022-release-NoHardware",
+      "configurePreset": "vs2022-NoHardware",
+      "configuration": "Release",
+      "jobs": 8
+    },
+    {
+      "name": "vs2019-debug",
+      "configurePreset": "vs2019",
+      "configuration": "Debug",
+      "jobs": 8
+    },
+    {
+      "name": "vs2019-release",
+      "configurePreset": "vs2019",
+      "configuration": "Release",
+      "jobs": 8
+    },
+    {
+      "name": "windows-ninja-debug-build",
+      "configurePreset": "windows-ninja-debug",
+      "description": "Build using Ninja (Debug) on Windows",
+      "jobs": 8
+    },
+    {
+      "name": "windows-ninja-release-build",
+      "configurePreset": "windows-ninja-release",
+      "description": "Build using Ninja (Release) on Windows",
+      "jobs": 8
+    }
+  ],
+  "testPresets": [
+
+  ]
+
+}
