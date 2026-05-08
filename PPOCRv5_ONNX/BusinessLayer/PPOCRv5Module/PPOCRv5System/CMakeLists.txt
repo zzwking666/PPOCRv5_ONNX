@@ -20,8 +20,8 @@ target_include_directories(${DEMO_TARGET}
 target_link_libraries(${DEMO_TARGET}
 	PRIVATE Qt6::Core
 	PRIVATE Modules::Modules
-	PRIVATE BusinessLayer::DetModel
-	PRIVATE BusinessLayer::RecModel
+	PUBLIC BusinessLayer::DetModel
+	PUBLIC BusinessLayer::RecModel
 )
 
 add_library(BusinessLayer::${DEMO_TARGET} ALIAS ${DEMO_TARGET})

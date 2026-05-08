@@ -1,15 +1,16 @@
 #include "DetModel.hpp"
-#include "Preprocess.hpp"
-#include "Postprocess.hpp"
+#include "ocr_utils.hpp"
 #include <iostream>
+#include <filesystem>
 
 DetModel::DetModel() : env_(ORT_LOGGING_LEVEL_WARNING, "det"),
 memory_info_(Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)) {}
 
 DetModel::~DetModel() = default;
 
-bool DetModel::Init(const std::string& model_path, bool use_gpu) {
+bool DetModel::Init(const std::string& model_path, const Config& cfg, bool use_gpu) {
     try {
+        cfg_ = cfg;
         session_options_ = Ort::SessionOptions();
         session_options_.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
         session_options_.SetIntraOpNumThreads(4);
@@ -19,7 +20,12 @@ bool DetModel::Init(const std::string& model_path, bool use_gpu) {
             session_options_.AppendExecutionProvider_CUDA(cuda_options);
         }
 
+#ifdef _WIN32
+        const std::wstring model_path_w = std::filesystem::path(model_path).wstring();
+        session_ = std::make_unique<Ort::Session>(env_, model_path_w.c_str(), session_options_);
+#else
         session_ = std::make_unique<Ort::Session>(env_, model_path.c_str(), session_options_);
+#endif
 
         Ort::AllocatorWithDefaultOptions allocator;
         for (size_t i = 0; i < session_->GetInputCount(); i++) {
@@ -37,45 +43,34 @@ bool DetModel::Init(const std::string& model_path, bool use_gpu) {
     }
 }
 
-std::vector<TextBox> DetModel::Infer(const cv::Mat& image) {
+cv::Mat DetModel::InferRaw(const cv::Mat& image, float& scale) {
     if (!session_) return {};
 
-    float scale = 1.0f;
-    cv::Mat input_blob = Preprocess(image, scale);
+    cv::Mat input_blob = ocr_utils::DetPreprocess(image, cfg_.target_size, scale);
 
-    // 获取动态输入尺寸
     int h = input_blob.size[2];
     int w = input_blob.size[3];
     std::vector<int64_t> input_shape = { 1, 3, h, w };
 
-    // 准备输入数据
     std::vector<float> input_data(input_blob.begin<float>(), input_blob.end<float>());
 
     Ort::Value input_tensor = Ort::Value::CreateTensor<float>(
         memory_info_, input_data.data(), input_data.size(), input_shape.data(), input_shape.size());
 
-    // 推理
     auto output_tensors = session_->Run(
         Ort::RunOptions{ nullptr },
         input_names_.data(), &input_tensor, 1,
         output_names_.data(), output_names_.size());
 
-    // 获取输出
-    auto output_info = output_tensors[0].GetTensorTypeAndShapeInfo();
-    auto output_shape = output_info.GetShape();
-
+    auto output_shape = output_tensors[0].GetTensorTypeAndShapeInfo().GetShape();
     float* output_data = output_tensors[0].GetTensorMutableData<float>();
-    cv::Mat pred(output_shape[2], output_shape[3], CV_32F, output_data);
 
-    return Postprocess(pred, scale, image.size());
+    return cv::Mat(output_shape[2], output_shape[3], CV_32F, output_data);
 }
 
-cv::Mat DetModel::Preprocess(const cv::Mat& image, float& scale) {
-    return Preprocess::DetPreprocess(image, target_size_, scale);
-}
-
-std::vector<TextBox> DetModel::Postprocess(const cv::Mat& pred, float scale,
-    const cv::Size& ori_size) {
-    return Postprocess::DBPostprocess(pred, det_db_thresh_, det_db_box_thresh_,
-        det_db_unclip_ratio_, ori_size, scale);
+std::vector<ocr_utils::TextBox> DetModel::Infer(const cv::Mat& image) {
+    float scale = 1.0f;
+    cv::Mat pred = InferRaw(image, scale);
+    return ocr_utils::DBPostprocess(pred, cfg_.db_thresh, cfg_.db_box_thresh,
+        cfg_.db_unclip_ratio, image.size(), scale);
 }

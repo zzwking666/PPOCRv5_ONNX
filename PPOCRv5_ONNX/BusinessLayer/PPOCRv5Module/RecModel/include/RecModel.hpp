@@ -4,14 +4,24 @@
 #include <vector>
 #include <string>
 #include <memory>
+#include "ocr_utils.hpp"
 
 class RecModel {
 public:
+    struct Config {
+        int rec_image_height = 48;
+    };
+
     RecModel();
     ~RecModel();
 
     bool Init(const std::string& model_path, const std::string& dict_path,
-        bool use_gpu = false);
+        const Config& cfg = {}, bool use_gpu = false);
+
+    // 原始推理：返回 logits
+    std::vector<float> InferRaw(const cv::Mat& image, int& seq_len);
+
+    // 便捷接口
     std::pair<std::string, float> Infer(const cv::Mat& image);
 
 private:
@@ -19,18 +29,11 @@ private:
     Ort::SessionOptions session_options_;
     std::unique_ptr<Ort::Session> session_;
     Ort::MemoryInfo memory_info_;
-
-    std::vector<const char*> input_names_;
-    std::vector<const char*> output_names_;
+    Config cfg_;
 
     std::vector<std::string> dict_;
     int blank_idx_ = 0;
 
-    // 预处理参数
-    const int rec_image_height_ = 48;
-    const int rec_batch_num_ = 6;
-    const int rec_max_len_ = 25;
-
-    cv::Mat Preprocess(const cv::Mat& image, int& dst_width);
-    std::string Postprocess(const std::vector<float>& output, int seq_len, float& score);
+    std::vector<const char*> input_names_;
+    std::vector<const char*> output_names_;
 };

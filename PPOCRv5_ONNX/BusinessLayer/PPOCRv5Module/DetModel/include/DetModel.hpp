@@ -4,38 +4,35 @@
 #include <vector>
 #include <string>
 #include <memory>
-
-struct TextBox {
-    std::vector<cv::Point> points;  // 4个角点
-    float score;
-};
+#include "ocr_utils.hpp"  // 只依赖 Utils
 
 class DetModel {
 public:
+    struct Config {
+        int target_size = 960;
+        float db_thresh = 0.3f;
+        float db_box_thresh = 0.6f;
+        float db_unclip_ratio = 1.5f;
+    };
+
     DetModel();
     ~DetModel();
 
-    bool Init(const std::string& model_path, bool use_gpu = false);
-    std::vector<TextBox> Infer(const cv::Mat& image);
+    bool Init(const std::string& model_path, const Config& cfg = {}, bool use_gpu = false);
+
+    // 原始推理：返回概率图，调用方自己做后处理
+    cv::Mat InferRaw(const cv::Mat& image, float& scale);
+
+    // 便捷接口：内部调用 utils 做后处理
+    std::vector<ocr_utils::TextBox> Infer(const cv::Mat& image);
 
 private:
     Ort::Env env_;
     Ort::SessionOptions session_options_;
     std::unique_ptr<Ort::Session> session_;
     Ort::MemoryInfo memory_info_;
+    Config cfg_;
 
     std::vector<const char*> input_names_;
     std::vector<const char*> output_names_;
-    std::vector<int64_t> input_shape_;
-
-    // 预处理参数（从 inference.yml 读取或硬编码）
-    const int target_size_ = 960;      // 检测模型输入尺寸（长边）
-    const float det_db_thresh_ = 0.3f;   // DB 二值化阈值
-    const float det_db_box_thresh_ = 0.6f;
-    const float det_db_unclip_ratio_ = 1.5f;
-    const bool use_dilation_ = false;
-
-    cv::Mat Preprocess(const cv::Mat& image, float& scale);
-    std::vector<TextBox> Postprocess(const cv::Mat& pred, float scale,
-        const cv::Size& ori_size);
 };

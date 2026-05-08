@@ -1,8 +1,8 @@
 #include "RecModel.hpp"
-#include "Preprocess.hpp"
-#include "Postprocess.hpp"
+#include "ocr_utils.hpp"
 #include <iostream>
 #include <fstream>
+#include <filesystem>
 
 RecModel::RecModel() : env_(ORT_LOGGING_LEVEL_WARNING, "rec"),
 memory_info_(Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)) {}
@@ -10,9 +10,10 @@ memory_info_(Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)) {
 RecModel::~RecModel() = default;
 
 bool RecModel::Init(const std::string& model_path, const std::string& dict_path,
-    bool use_gpu) {
+    const Config& cfg, bool use_gpu) {
     try {
-        // 加载字典
+        cfg_ = cfg;
+
         std::ifstream fs(dict_path);
         if (!fs.is_open()) {
             std::cerr << "Failed to open dict: " << dict_path << std::endl;
@@ -22,8 +23,8 @@ bool RecModel::Init(const std::string& model_path, const std::string& dict_path,
         while (std::getline(fs, line)) {
             if (!line.empty()) dict_.push_back(line);
         }
-        blank_idx_ = static_cast<int>(dict_.size());  // CTC blank index
-        dict_.push_back(" ");  // blank token
+        blank_idx_ = static_cast<int>(dict_.size());
+        dict_.push_back(" ");
 
         session_options_ = Ort::SessionOptions();
         session_options_.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
@@ -34,7 +35,12 @@ bool RecModel::Init(const std::string& model_path, const std::string& dict_path,
             session_options_.AppendExecutionProvider_CUDA(cuda_options);
         }
 
+#ifdef _WIN32
+        const std::wstring model_path_w = std::filesystem::path(model_path).wstring();
+        session_ = std::make_unique<Ort::Session>(env_, model_path_w.c_str(), session_options_);
+#else
         session_ = std::make_unique<Ort::Session>(env_, model_path.c_str(), session_options_);
+#endif
 
         Ort::AllocatorWithDefaultOptions allocator;
         for (size_t i = 0; i < session_->GetInputCount(); i++) {
@@ -52,13 +58,13 @@ bool RecModel::Init(const std::string& model_path, const std::string& dict_path,
     }
 }
 
-std::pair<std::string, float> RecModel::Infer(const cv::Mat& image) {
-    if (!session_) return { "", 0.0f };
+std::vector<float> RecModel::InferRaw(const cv::Mat& image, int& seq_len) {
+    if (!session_) return {};
 
     int dst_width = 0;
-    cv::Mat input_blob = Preprocess(image, dst_width);
+    cv::Mat input_blob = ocr_utils::RecPreprocess(image, cfg_.rec_image_height, dst_width);
 
-    std::vector<int64_t> input_shape = { 1, 3, rec_image_height_, dst_width };
+    std::vector<int64_t> input_shape = { 1, 3, cfg_.rec_image_height, dst_width };
     std::vector<float> input_data(input_blob.begin<float>(), input_blob.end<float>());
 
     Ort::Value input_tensor = Ort::Value::CreateTensor<float>(
@@ -69,30 +75,22 @@ std::pair<std::string, float> RecModel::Infer(const cv::Mat& image) {
         input_names_.data(), &input_tensor, 1,
         output_names_.data(), output_names_.size());
 
-    auto output_info = output_tensors[0].GetTensorTypeAndShapeInfo();
-    auto output_shape = output_info.GetShape();
-
-    // output_shape: [batch, seq_len, num_classes]
-    int seq_len = static_cast<int>(output_shape[1]);
+    auto output_shape = output_tensors[0].GetTensorTypeAndShapeInfo().GetShape();
+    seq_len = static_cast<int>(output_shape[1]);
     int num_classes = static_cast<int>(output_shape[2]);
 
     float* output_data = output_tensors[0].GetTensorMutableData<float>();
-    std::vector<float> output_vec(output_data, output_data + seq_len * num_classes);
-
-    float score = 0.0f;
-    std::string text = Postprocess(output_vec, seq_len, score);
-
-    return { text, score };
+    return std::vector<float>(output_data, output_data + seq_len * num_classes);
 }
 
-cv::Mat RecModel::Preprocess(const cv::Mat& image, int& dst_width) {
-    return Preprocess::RecPreprocess(image, rec_image_height_, dst_width);
-}
+std::pair<std::string, float> RecModel::Infer(const cv::Mat& image) {
+    int seq_len = 0;
+    auto output = InferRaw(image, seq_len);
 
-std::string RecModel::Postprocess(const std::vector<float>& output, int seq_len, float& score) {
-    // 取每个时间步的最大值索引
-    std::vector<int> preds;
     int num_classes = static_cast<int>(dict_.size());
+    std::vector<int> preds;
+    float total_score = 0.0f;
+    int valid_count = 0;
 
     for (int t = 0; t < seq_len; t++) {
         int max_idx = 0;
@@ -104,7 +102,15 @@ std::string RecModel::Postprocess(const std::vector<float>& output, int seq_len,
             }
         }
         preds.push_back(max_idx);
+
+        if (max_idx != blank_idx_) {
+            total_score += max_val;
+            valid_count++;
+        }
     }
 
-    return Postprocess::CTCDecode(preds, dict_, blank_idx_);
+    std::string text = ocr_utils::CTCDecode(preds, dict_, blank_idx_);
+    float score = (valid_count > 0) ? (total_score / valid_count) : 0.0f;
+
+    return { text, score };
 }

@@ -45,37 +45,31 @@ int main(int argc, char** argv) {
     std::string dict_path = argv[3];
     std::string image_path = (argc > 4) ? argv[4] : "test.jpg";
 
-    // 初始化系统
     PPOCRv5System ocr;
-    if (!ocr.Init(det_path, rec_path, dict_path, false)) {  // false = CPU
+    if (!ocr.Init(det_path, rec_path, dict_path, false)) {
         std::cerr << "Init failed!" << std::endl;
         return -1;
     }
 
-    // 读取图像
     cv::Mat image = cv::imread(image_path);
     if (image.empty()) {
         std::cerr << "Failed to load image: " << image_path << std::endl;
         return -1;
     }
 
-    // 执行 OCR
     auto results = ocr.OCR(image);
 
-    // 输出结果
     std::cout << "Detected " << results.size() << " text regions:" << std::endl;
     for (size_t i = 0; i < results.size(); i++) {
         std::cout << "[" << i << "] Text: " << results[i].text
             << " | Score: " << results[i].score << std::endl;
 
-        // 在图像上画框
         for (size_t j = 0; j < results[i].box.size(); j++) {
             cv::line(image, results[i].box[j],
                 results[i].box[(j + 1) % 4], cv::Scalar(0, 255, 0), 2);
         }
     }
 
-    // 保存结果
     cv::imwrite("result.jpg", image);
     std::cout << "Result saved to result.jpg" << std::endl;
 
