@@ -14,13 +14,28 @@ bool RecModel::Init(const std::string& model_path, const std::string& dict_path,
     try {
         cfg_ = cfg;
 
+        dict_.clear();
+
         std::ifstream fs(dict_path);
         if (!fs.is_open()) {
             std::cerr << "Failed to open dict: " << dict_path << std::endl;
             return false;
         }
         std::string line;
+        bool first_line = true;
         while (std::getline(fs, line)) {
+            if (first_line) {
+                first_line = false;
+                if (line.size() >= 3 &&
+                    static_cast<unsigned char>(line[0]) == 0xEF &&
+                    static_cast<unsigned char>(line[1]) == 0xBB &&
+                    static_cast<unsigned char>(line[2]) == 0xBF) {
+                    line.erase(0, 3);
+                }
+            }
+            if (!line.empty() && line.back() == '\r') {
+                line.pop_back();
+            }
             if (!line.empty()) dict_.push_back(line);
         }
         blank_idx_ = static_cast<int>(dict_.size());

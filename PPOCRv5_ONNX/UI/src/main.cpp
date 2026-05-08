@@ -33,7 +33,16 @@
 #include <opencv2/opencv.hpp>
 #include <iostream>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 int main(int argc, char** argv) {
+#ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+#endif
+
     // ========== 硬编码路径 ==========
     std::string det_path = R"(C:\Users\zfkj4090\PP-OCRv5_server_det_onnx\inference.onnx)";
     std::string rec_path = R"(C:\Users\zfkj4090\PP-OCRv5_server_rec_onnx\inference.onnx)";
@@ -82,9 +91,30 @@ int main(int argc, char** argv) {
     }
 
     // ========== 保存结果 ==========
-    std::string output_path = R"(C:\Users\zfkj4090\result.jpg)";
-    cv::imwrite(output_path, image);
-    std::cout << "Result saved to " << output_path << std::endl;
+    std::string output_path = R"(C:\Users\zfkj4090\i.png)";
+    try {
+        if (!cv::haveImageWriter(output_path)) {
+            std::cerr << "No writer found for output path extension: " << output_path << std::endl;
+            std::cout << "Press Enter to exit..." << std::endl;
+            std::cin.get();
+            return -1;
+        }
+
+        if (!cv::imwrite(output_path, image)) {
+            std::cerr << "Failed to save image: " << output_path << std::endl;
+            std::cout << "Press Enter to exit..." << std::endl;
+            std::cin.get();
+            return -1;
+        }
+
+        std::cout << "Result saved to " << output_path << std::endl;
+    }
+    catch (const cv::Exception& e) {
+        std::cerr << "OpenCV exception while saving image: " << e.what() << std::endl;
+        std::cout << "Press Enter to exit..." << std::endl;
+        std::cin.get();
+        return -1;
+    }
 
     // 调试时暂停
     std::cout << "Press Enter to exit..." << std::endl;
